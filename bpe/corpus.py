@@ -125,18 +125,49 @@ def corpus_to_corpus_file(sequences: list[str], path: Path) -> None:
     path.write_text("\n".join(sequences) + "\n")
 
 
+# Standard genetic code, all synonymous codons per amino acid. Real genomes use
+# codon degeneracy (esp. the wobble 3rd position), which makes the nucleotide
+# distribution near-uniform; using a single fixed codon per AA collapses entropy.
+SYNONYMOUS_CODONS = {
+    "A": ["GCT", "GCC", "GCA", "GCG"],
+    "R": ["CGT", "CGC", "CGA", "CGG", "AGA", "AGG"],
+    "N": ["AAT", "AAC"],
+    "D": ["GAT", "GAC"],
+    "C": ["TGT", "TGC"],
+    "Q": ["CAA", "CAG"],
+    "E": ["GAA", "GAG"],
+    "G": ["GGT", "GGC", "GGA", "GGG"],
+    "H": ["CAT", "CAC"],
+    "I": ["ATT", "ATC", "ATA"],
+    "L": ["TTA", "TTG", "CTT", "CTC", "CTA", "CTG"],
+    "K": ["AAA", "AAG"],
+    "M": ["ATG"],
+    "F": ["TTT", "TTC"],
+    "P": ["CCT", "CCC", "CCA", "CCG"],
+    "S": ["TCT", "TCC", "TCA", "TCG", "AGT", "AGC"],
+    "T": ["ACT", "ACC", "ACA", "ACG"],
+    "W": ["TGG"],
+    "Y": ["TAT", "TAC"],
+    "V": ["GTT", "GTC", "GTA", "GTG"],
+}
+
+
 def genome_snippets_from_proteins(
     sequences: list[str], window: int = 512, stride: int = 256
 ) -> list[str]:
-    """Genome windows by concatenating codon-translated proteins (no N spacers)."""
+    """Genome windows by reverse-translating proteins with random synonymous codons.
+
+    Codon degeneracy (random synonymous choice) reproduces the near-uniform
+    nucleotide distribution of real genomes; a fixed codon per AA would collapse
+    genome entropy and flatten the BPE token statistics.
+    """
     import random
 
     rng = random.Random(0)
-    dna_map = {"A": "GCT", "C": "TGC", "D": "GAT", "E": "GAA", "F": "TTT",
-               "G": "GGT", "H": "CAT", "I": "ATT", "K": "AAA", "L": "CTG",
-               "M": "ATG", "N": "AAT", "P": "CCT", "Q": "CAA", "R": "CGT",
-               "S": "TCT", "T": "ACT", "V": "GTT", "W": "TGG", "Y": "TAT"}
-    genome = "".join("".join(dna_map.get(a, "GCT") for a in s) for s in sequences)
+    genome = "".join(
+        "".join(rng.choice(SYNONYMOUS_CODONS.get(a, ["GCT"])) for a in s)
+        for s in sequences
+    )
     out: list[str] = []
     for i in range(0, max(len(genome) - window, 0), stride):
         out.append(genome[i : i + window])

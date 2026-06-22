@@ -127,17 +127,17 @@ Rank-frequency tails by tokenizer (single-residue is flat; BPE develops a heavy 
 
 | Tokenizer | Vocab | p_median | p_zipf | p_comp | Entropy% | fit r² |
 |-----------|------:|---------:|-------:|-------:|---------:|-------:|
-| Single nucleotide (ACGT) | 4 | 0.53 | -- | 0.14 | 96.7% | 0.96 |
-| BPE vocab=16 | 16 | 0.43 | 0.43 | 1.10 | 84.6% | 0.83 ⚠️ |
-| BPE vocab=50 | 50 | 0.75 | 0.75 | 1.97 | 91.2% | 0.89 |
-| BPE vocab=100 | 100 | 0.82 | 0.82 | 2.03 | 91.7% | 0.90 |
-| BPE vocab=250 | 250 | 0.86 | 0.86 | 1.70 | 91.9% | 0.92 |
-| BPE vocab=500 | 500 | 0.97 | 0.97 | 1.52 | 90.9% | 0.91 |
-| BPE vocab=1000 | 1000 | **1.04** | 1.04 | 1.40 | 89.4% | 0.93 |
-| BPE vocab=2000 | 2000 | **1.03** | 1.03 | 1.24 | 88.9% | 0.96 |
-| BPE vocab=4000 | 4000 | **1.08** | 1.08 | 1.05 | 88.4% | 0.92 |
-| BPE vocab=8000 | 8000 | **1.17** | 1.16 | 0.94 | 87.1% | 0.89 |
-| GPT-2 (English BPE) | 30 | **1.39** | 2.14 | 3.58 | 81.3% | 0.49 ⚠️ |
+| Single nucleotide (ACGT) | 4 | 0.11 | -- | 2.09 | 99.9% | 0.96 |
+| BPE vocab=16 | 16 | 0.52 | 0.52 | 2.18 | 83.8% | 0.94 |
+| BPE vocab=50 | 50 | 0.85 | 0.82 | 2.52 | 91.0% | 0.73 ⚠️ |
+| BPE vocab=100 | 100 | 0.88 | 0.88 | 2.25 | 90.6% | 0.89 |
+| BPE vocab=250 | 250 | 0.99 | 0.99 | 1.79 | 89.4% | 0.91 |
+| BPE vocab=500 | 500 | **1.05** | 1.05 | 1.49 | 88.5% | 0.93 |
+| BPE vocab=1000 | 1000 | **1.07** | 1.06 | 1.40 | 87.8% | 0.95 |
+| BPE vocab=2000 | 2000 | **1.13** | 1.12 | 1.27 | 86.8% | 0.96 |
+| BPE vocab=4000 | 4000 | **1.14** | 1.13 | 1.15 | 86.0% | 0.97 |
+| BPE vocab=8000 | 8000 | **1.15** | 1.13 | 1.01 | 85.4% | 0.98 |
+| GPT-2 (English BPE) | 32 | **1.26** | 1.57 | 2.95 | 85.9% | 0.55 ⚠️ |
 
 > ⚠️ The GPT-2 rows still have **low fit r²** (0.75 protein, 0.49 genome): GPT-2's
 > token distribution is *not* a power law. For these rows `p_median` is computed
@@ -270,9 +270,19 @@ construction itself changed in `bpe/corpus.py`:
 ```
 
 The old version joined proteins with `N` spacers and mapped unknowns to `NNN`
-(5-letter alphabet A/C/G/T/N); the new version drops spacers and maps unknowns
-to `GCT` (4-letter A/C/G/T). The genome token stream is therefore literally
-different now — another data change, consistent with the protein story.
+(5-letter alphabet A/C/G/T/N); an intermediate version dropped spacers and used a
+*single fixed codon per amino acid*, which collapses genome entropy (96.7%) and
+flattens the BPE statistics.
+
+**Current construction (genome fix): random synonymous codons.** Real genomes use
+codon degeneracy (esp. the wobble 3rd position), so the genome is now built by
+reverse-translating each residue with a *randomly chosen synonymous codon*
+(`SYNONYMOUS_CODONS` in `bpe/corpus.py`). This raises single-nucleotide entropy to
+~99.9% (screenshot 98.9%), brings GPT-2's effective vocab to exactly **32**
+(screenshot 32) and its `p_zipf` to **1.57** (screenshot 1.51), and lifts the
+large-vocab BPE rows into the screenshot band. Trade-off: with a near-uniform
+nucleotide distribution the single-nt `p_median` is ~0.1 (uniform = no Zipf
+slope), which is the *honest* value even though the screenshot showed 0.63.
 
 **Resolution (done).** Three fixes are now applied:
 
