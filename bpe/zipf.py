@@ -28,6 +28,7 @@ class DistributionMetrics:
     p_zipf: float | None
     p_comp: float
     entropy_pct: float
+    fit_r2: float = float("nan")  # goodness-of-fit of the global power-law fit
     n_tokens: int = 0
     n_types: int = 0
 
@@ -172,7 +173,7 @@ def compute_distribution_metrics(
     type_counts = Counter(tokens)
     freqs = _ranked_freqs(dict(type_counts))
 
-    p_zipf, _ = fit_zipf_exponent(freqs) if len(freqs) >= 3 else (float("nan"), 0.0)
+    p_zipf, fit_r2 = fit_zipf_exponent(freqs) if len(freqs) >= 3 else (float("nan"), float("nan"))
 
     # p_median: bootstrap; for tiny vocabs fall back to global fit
     if len(type_counts) <= 20:
@@ -203,6 +204,7 @@ def compute_distribution_metrics(
         p_zipf=p_zipf_out,
         p_comp=p_comp,
         entropy_pct=entropy_pct,
+        fit_r2=float(fit_r2) if np.isfinite(fit_r2) else float("nan"),
         n_tokens=len(tokens),
         n_types=len(type_counts),
     )
