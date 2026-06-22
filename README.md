@@ -133,8 +133,10 @@ Rank-frequency tails by tokenizer (single-AA is flat; BPE develops a heavy tail)
 | BPE vocab=8000 | 8000 | **1.12** | 1.10 | 0.92 | 87.8% |
 | GPT-2 (English BPE) | 30 | **2.02** ⚠️ | 2.01 | 3.60 | 81.4% |
 
-> ⚠️ The GPT-2 `p_median ≈ 2.0` rows are a **metric artifact**, not a real
-> signal — see [§7](#7-reproducibility-note-why-the-tables-drifted-from-the-screenshots).
+> ⚠️ The GPT-2 `p_median ≈ 2.0` rows are a **power-law misfit** (GPT-2's
+> distribution isn't Zipfian; the line-fit r² is only ~0.77) and are highly
+> **corpus-dependent** — not a real signal. See
+> [§7](#7-reproducibility-note-why-the-tables-drifted-from-the-screenshots).
 > The trustworthy GPT-2 evidence is in Result B, where GPT-2 is clearly *worst*.
 
 **Takeaway:** single-residue tokenization sits at α ≈ 0.4–0.5; domain BPE moves
@@ -202,26 +204,47 @@ train / 60 eval sequences capped at 200 residues), 120 steps each.
 ## 7. Reproducibility note: why the tables drifted from the screenshots
 
 The current Result-A tables differ from earlier screenshots (e.g. Single-AA
-0.60 → 0.41; GPT-2 0.88 → 2.01). **The drift is from uncommitted code changes,
-not random noise.** `bpe/zipf.py` and `bpe/corpus.py` were edited after the
-screenshots were produced.
+0.60 → 0.41; GPT-2 0.88 → 2.01). It is tempting to blame the `p_median`
+estimator rewrite, but **instrumentation rules that out** — the drift is
+overwhelmingly a **corpus (data) difference**, not the metric.
 
-**Protein → metric change only (data identical).** The synthetic protein
-generator is seeded and was not modified, so the corpus is byte-for-byte the
-same. What changed is how `p_median` is computed:
+**The metric change is *not* the cause.** Running the old metric (single global
+log-log fit) and the new metric (bootstrap median + r² ≥ 0.35 filter) on the
+*same* current corpus gives essentially identical numbers, so the rewrite is
+inconsequential here:
 
-- *Old (screenshots):* a single **global** log-log slope of frequency vs rank.
-- *New (current):* a **bootstrap median** — 40 multinomial resamples, each fit
-  separately, filtered to keep only fits with r² ≥ 0.35, then take the median.
+| Tokenizer | old global-fit α | new bootstrap α | r² |
+|-----------|-----------------:|----------------:|---:|
+| single_aa | 0.407 | 0.407 | 0.94 |
+| gpt2_on_protein | 2.039 | 1.996 | 0.77 |
+| domain_bpe_1000 | 1.278 | 1.287 | 0.87 |
 
-The new estimator is what shifts Single-AA down and pushes GPT-2 up to ≈ 2.0.
-GPT-2 fragments protein strings into a long tail of rare tokens; under the
-bootstrap+r²-filter, the surviving fits land on an artificially steep slope. So
-**GPT-2 `p_median ≈ 2.0` is an estimator artifact**, which is exactly why we
-trust Result B (training) over Result A for the GPT-2 claim.
+(Reproduce with `experiments/diagnose_gpt2.py`.)
 
-**Genome → metric change *and* data change.** Same estimator rewrite, plus the
-genome construction itself changed in `bpe/corpus.py`:
+**The real cause is the corpus.** The current tables run on the **synthetic
+motif corpus**; the screenshots were generated on **different/real protein
+data**. Two pieces of evidence:
+
+- *Single-AA is a pure tell.* Its α is just the amino-acid frequency skew. Real
+  proteins are skewed (Leu ~10%, Trp ~1%) → α ≈ 0.6 (the screenshot). The
+  synthetic corpus fills gaps with near-uniform random AAs → flatter → α ≈ 0.41
+  (current). Same metric, different data.
+- *GPT-2's exponent is wildly corpus-sensitive* because its merges are frozen
+  English byte-pairs that can't adapt to biology. Just changing corpus size
+  swings it: synthetic n=200 → 1.61, n=1000 → 1.87, n=5000 → 2.06, random-AA →
+  1.86.
+
+**And GPT-2 ≈ 2.0 isn't a meaningful Zipf exponent in the first place.**
+GPT-2-on-protein does not follow a power law: its head slope ≈ 0.96 and tail
+slope ≈ 0.96, yet a single straight-line fit over all ranks returns ~2.0 with
+r² of only **0.77** (vs 0.94 single-AA, 0.87 domain BPE). A line is the wrong
+model for GPT-2's curved, cliff-tailed distribution, so the fitted number is an
+artifact of the misfit regardless of corpus. This is *why* we trust Result B
+(training bits/residue) over Result A for the GPT-2 claim — and there GPT-2 is
+clearly worst.
+
+**Genome → also a data change (independent of the above).** The genome
+construction itself changed in `bpe/corpus.py`:
 
 ```diff
 - genome = "N".join("".join(dna_map.get(a, "NNN") for a in s) for s in sequences)
@@ -231,13 +254,15 @@ genome construction itself changed in `bpe/corpus.py`:
 The old version joined proteins with `N` spacers and mapped unknowns to `NNN`
 (5-letter alphabet A/C/G/T/N); the new version drops spacers and maps unknowns
 to `GCT` (4-letter A/C/G/T). The genome token stream is therefore literally
-different now, on top of the metric change.
+different now — another data change, consistent with the protein story.
 
-**Status / TODO:** decide on a single canonical `p_median` definition. Either
-restore the global-fit metric (matches screenshots) or keep the bootstrap
-metric and fix the r²-filter bias that inflates GPT-2. Until then, treat the
-*shape* of Result A as the evidence (single-residue flat, BPE ≈ 1+), not the
-exact GPT-2 number.
+**Status / TODO:** to match the screenshots, regenerate Result A on the **same
+corpus** they used (real Swiss-Prot via `--corpus uniprot`, or the matching
+synthetic size), and pin that choice in the runners. Separately, report a
+goodness-of-fit (r²) next to every `p_median` so non-power-law cases like GPT-2
+are flagged automatically rather than presented as exponents. Until then, treat
+the *shape* of Result A as the evidence (single-residue flat, BPE ≈ 1+) and use
+Result B for the GPT-2 claim.
 
 ---
 
@@ -351,7 +376,9 @@ ATTENTION_PROPOSAL.md       # Spectral Composition Attention design + test plan
 - **Tiny scale.** TinyGPT (~0.25M non-embedding params, 120 steps, CPU) is a
   *directional* proof, not a publishable scaling curve. The next step is a real
   parameter/data scaling sweep to estimate the exponent, not just one point.
-- **`p_median` definition is unsettled** — see [§7](#7-reproducibility-note-why-the-tables-drifted-from-the-screenshots).
+- **Result A is corpus-dependent** and GPT-2's distribution isn't a power law,
+  so its `p_median` is unreliable — see
+  [§7](#7-reproducibility-note-why-the-tables-drifted-from-the-screenshots).
   Use Result B for the GPT-2 conclusion.
 - **Architecture is a proposal.** Spectral Composition Attention is designed and
   has a falsifiable test plan, but is not yet implemented or run.
