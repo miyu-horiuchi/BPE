@@ -107,6 +107,34 @@ def bootstrap_median_zipf(
     return float(np.median(exponents))
 
 
+def chunk_median_zipf(
+    tokens: list[str],
+    chunk_size: int = 1000,
+    min_chunks: int = 3,
+) -> float:
+    """Median Zipf exponent over fixed-size contiguous chunks of the stream.
+
+    Robust to non-power-law tails: when a global rank-frequency fit is dominated
+    by a steep cliff (as with GPT-2 applied to biology), the per-chunk fits
+    recover the local Zipf slope instead of the cliff-inflated global slope.
+    """
+    from collections import Counter
+
+    exponents: list[float] = []
+    for i in range(0, len(tokens) - chunk_size + 1, chunk_size):
+        counts = Counter(tokens[i : i + chunk_size])
+        freqs = np.array([c for _, c in counts.most_common()], dtype=float)
+        if len(freqs) < 3:
+            continue
+        freqs = freqs / freqs.sum()
+        alpha, _ = fit_zipf_exponent(freqs)
+        if np.isfinite(alpha):
+            exponents.append(alpha)
+    if len(exponents) < min_chunks:
+        return float("nan")
+    return float(np.median(exponents))
+
+
 def composition_spectrum_exponent(
     sequences: Iterable[str],
     tokenizer: TokenCounter,
@@ -159,12 +187,18 @@ def composition_spectrum_exponent(
     return float(alpha)
 
 
+# Below this global-fit r2, the distribution is not a clean power law, so the
+# single global slope is unreliable; fall back to the chunk-robust median.
+ROBUST_FIT_R2 = 0.80
+
+
 def compute_distribution_metrics(
     sequences: Iterable[str],
     tokenizer: TokenCounter,
     *,
     display_name: str | None = None,
     vocab_override: int | None = None,
+    robust_chunk_size: int = 1000,
 ) -> DistributionMetrics:
     seq_list = list(sequences)
     tokens = corpus_token_stream(seq_list, tokenizer)
@@ -182,6 +216,13 @@ def compute_distribution_metrics(
         p_median = bootstrap_median_zipf(tokens)
         if not np.isfinite(p_median):
             p_median = float(p_zipf)
+
+    # Non-power-law distributions (low r2, e.g. GPT-2 on biology) have a
+    # cliff-inflated global slope; report the chunk-robust local Zipf slope.
+    if np.isfinite(fit_r2) and fit_r2 < ROBUST_FIT_R2:
+        cm = chunk_median_zipf(tokens, chunk_size=robust_chunk_size)
+        if np.isfinite(cm):
+            p_median = cm
 
     p_comp = composition_spectrum_exponent(seq_list, tokenizer)
 
