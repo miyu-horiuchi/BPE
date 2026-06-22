@@ -121,7 +121,7 @@ Rank-frequency tails by tokenizer (single-residue is flat; BPE develops a heavy 
 | BPE 2000 | 2000 | **1.12** | 0.96 |
 | BPE 4000 | 4000 | **1.17** | 0.97 |
 | BPE 8000 | 8000 | **1.18** | 0.96 |
-| GPT-2 BPE (English) | 50257 | 0.87 | 0.75 ⚠️ |
+| GPT-2 (English BPE) | 50257 | 0.87 | 0.75 ⚠️ |
 
 ### Genome (`results/genome/genome_tokenizer_table.md`)
 

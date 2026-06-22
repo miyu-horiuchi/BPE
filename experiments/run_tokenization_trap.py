@@ -73,7 +73,7 @@ def run(args: argparse.Namespace) -> None:
         compute_distribution_metrics(
             sequences,
             gpt2,
-            display_name="GPT-2 BPE (English)",
+            display_name="GPT-2 (English BPE)",
             vocab_override=50257,
         )
     )
