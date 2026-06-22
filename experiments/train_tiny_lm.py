@@ -64,14 +64,21 @@ class TinyGPT(nn.Module):
         self.ln = nn.LayerNorm(cfg.d_model)
         self.head = nn.Linear(cfg.d_model, vocab_size, bias=False)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def hidden(self, x: torch.Tensor) -> torch.Tensor:
+        """Return the final hidden states (after LN, before the LM head).
+
+        Used by the downstream linear-probe experiment to extract frozen
+        sequence features without the vocabulary-specific output projection.
+        """
         b, t = x.shape
         pos = torch.arange(t, device=x.device).unsqueeze(0).expand(b, t)
         h = self.tok_emb(x) + self.pos_emb(pos)
         mask = nn.Transformer.generate_square_subsequent_mask(t, device=x.device)
         h = self.blocks(h, mask=mask)
-        h = self.ln(h)
-        return self.head(h)
+        return self.ln(h)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.head(self.hidden(x))
 
 
 def train_one(
