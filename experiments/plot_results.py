@@ -29,10 +29,10 @@ def plot_zipf_comparison(
     alphas = []
     names = []
     for tok in tokenizers:
-        from bpe.zipf import compute_zipf_metrics
+        from bpe.zipf import compute_distribution_metrics
 
-        m = compute_zipf_metrics(sequences, tok)
-        alphas.append(m.zipf_exponent)
+        m = compute_distribution_metrics(sequences, tok)
+        alphas.append(m.p_median)
         names.append(tok.name)
 
     axes[1].barh(names, alphas, color=["#4C72B0", "#DD8452", "#55A868", "#C44E52"][: len(names)])

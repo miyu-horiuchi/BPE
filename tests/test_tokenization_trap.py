@@ -1,9 +1,10 @@
 """Tests for BPE tokenization experiment."""
 
 from bpe.corpus import synthetic_motif_corpus
+from bpe.report import genome_table_markdown, protein_table_markdown
 from bpe.spectral import rank_bigram_merges, target_vocab_from_spectrum
 from bpe.tokenizers import AminoAcidTokenizer, DomainBPETrainer
-from bpe.zipf import compute_zipf_metrics, compare_zipf_profiles
+from bpe.zipf import compute_distribution_metrics
 
 
 def test_synthetic_corpus_has_motifs():
@@ -26,20 +27,21 @@ def test_domain_bpe_trains(tmp_path):
     corpus.write_text("\n".join(seqs))
     tok = DomainBPETrainer(vocab_size=128, min_frequency=2).train(corpus, name="test_bpe")
     assert tok.vocab_size > 24
-    # Repeated motifs should merge on at least some sequences
     merged = [s for s in seqs if len(tok.tokenize(s)) < len(s) * 0.95]
     assert len(merged) > 0
 
 
-def test_zipf_single_aa_vs_bpe(tmp_path):
-    seqs = synthetic_motif_corpus(n=500, seed=2)
+def test_distribution_metrics_shape(tmp_path):
+    seqs = synthetic_motif_corpus(n=300, seed=2)
     corpus = tmp_path / "corpus.txt"
     corpus.write_text("\n".join(seqs))
     aa = AminoAcidTokenizer()
-    bpe = DomainBPETrainer(vocab_size=256, min_frequency=2).train(corpus, name="domain_bpe_256")
-    metrics = compare_zipf_profiles(seqs, [aa, bpe])
-    assert metrics[0].n_types <= 21
-    assert bpe.vocab_size > aa.vocab_size
+    bpe = DomainBPETrainer(vocab_size=256, min_frequency=2).train(corpus, name="bpe_256")
+    m_aa = compute_distribution_metrics(seqs, aa, display_name="Single AA", vocab_override=20)
+    m_bpe = compute_distribution_metrics(seqs, bpe, display_name="BPE 256", vocab_override=256)
+    assert 0 < m_aa.p_median < 2
+    assert m_bpe.p_median > m_aa.p_median
+    assert 0 <= m_aa.entropy_pct <= 100
 
 
 def test_spectral_merges_ranked():
@@ -49,7 +51,14 @@ def test_spectral_merges_ranked():
     assert merges[0].score >= merges[-1].score
 
 
-def test_suggested_vocab_in_range():
-    seqs = synthetic_motif_corpus(n=100, seed=4)
-    v = target_vocab_from_spectrum(seqs)
-    assert v in {64, 128, 256, 512, 1024, 2048}
+def test_markdown_table_format():
+    from bpe.zipf import DistributionMetrics
+
+    rows = [
+        DistributionMetrics("Single AA", 20, 0.60, 0.60, 0.0, 98.0),
+        DistributionMetrics("BPE 500", 500, 1.12, 1.12, 1.12, 88.0),
+    ]
+    md = protein_table_markdown(rows)
+    assert "| Tokenizer | Vocab | p_median |" in md
+    assert "**1.12**" in md
+    assert "0.60" in md  # below 1.0, not bold

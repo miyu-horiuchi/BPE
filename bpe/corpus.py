@@ -128,7 +128,7 @@ def corpus_to_corpus_file(sequences: list[str], path: Path) -> None:
 def genome_snippets_from_proteins(
     sequences: list[str], window: int = 512, stride: int = 256
 ) -> list[str]:
-    """Fake genome windows by concatenating proteins with N spacers (sanity check only)."""
+    """Genome windows by concatenating codon-translated proteins (no N spacers)."""
     import random
 
     rng = random.Random(0)
@@ -136,7 +136,7 @@ def genome_snippets_from_proteins(
                "G": "GGT", "H": "CAT", "I": "ATT", "K": "AAA", "L": "CTG",
                "M": "ATG", "N": "AAT", "P": "CCT", "Q": "CAA", "R": "CGT",
                "S": "TCT", "T": "ACT", "V": "GTT", "W": "TGG", "Y": "TAT"}
-    genome = "N".join("".join(dna_map.get(a, "NNN") for a in s) for s in sequences)
+    genome = "".join("".join(dna_map.get(a, "GCT") for a in s) for s in sequences)
     out: list[str] = []
     for i in range(0, max(len(genome) - window, 0), stride):
         out.append(genome[i : i + window])
